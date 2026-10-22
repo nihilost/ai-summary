@@ -5,10 +5,22 @@ from __future__ import annotations
 import json
 import os
 import re
+import sys
 import time
 from pathlib import Path
 
 _ILLEGAL = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+
+
+def app_root() -> Path:
+    """程序根目录：模型、输出等“跟着 exe 走”的资源都挂在这里。
+
+    开发态是项目根（本文件的上一级）；PyInstaller 冻结后是 exe 所在目录，
+    于是把 models\whisper 放到 exe 旁边即可被识别，无需任何配置。
+    """
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent.parent
 
 
 def safe_name(text: str, *, maxlen: int = 80) -> str:

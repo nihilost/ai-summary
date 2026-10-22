@@ -20,10 +20,10 @@ from urllib.parse import unquote, urlparse
 
 from . import pipeline
 from .cli import build_parser
-from .util import human_size, read_json
+from .util import app_root, human_size, read_json
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = app_root()
 DEFAULT_OUTPUT = PROJECT_ROOT / "vidsum-out"
 
 _CONTENT_TYPES = {
@@ -209,6 +209,17 @@ def _child_env() -> dict:
     return env
 
 
+def _child_cmd(json_path: str) -> list:
+    """子进程命令行：开发态走 `python -m`，exe 冻结后自调用。
+
+    PyInstaller 单文件模式下 sys.executable 就是 vidsum.exe 本身，
+    没有解释器可依赖；exe 内建的 --job-runner 分支由 vidsum.entry 分发。
+    """
+    if getattr(sys, "frozen", False):
+        return [sys.executable, "--job-runner", json_path]
+    return [sys.executable, "-m", "vidsum._job_runner", json_path]
+
+
 def _run_job(job: Job) -> None:
     """把任务丢进独立子进程：卡死时 terminate() 能连 CUDA 初始化一起杀掉。"""
     args = _build_args(job.params)
@@ -217,7 +228,7 @@ def _run_job(job: Job) -> None:
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
             json.dump(_jsonable(vars(args)), fh, ensure_ascii=False)
         proc = subprocess.Popen(
-            [sys.executable, "-m", "vidsum._job_runner", json_path],
+            _child_cmd(json_path),
             cwd=str(PROJECT_ROOT),
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
@@ -268,18 +279,24 @@ def stop_run() -> None:
 
 
 def _kill_orphan_runners() -> None:
-    """清掉上一次控制台遗留的 _job_runner 子进程（只有本模块会拉起它们）。"""
+    """清掉上一次控制台遗留的任务子进程（只有本模块会拉起它们）。
+
+    开发态子进程是 `python.exe -m vidsum._job_runner`，exe 冻结后是
+    `vidsum.exe --job-runner`，按当前自己的形态匹配才对得上。
+    """
     if os.name != "nt":
         return
-    script = ("Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" "
-              "| Where-Object { $_.CommandLine -like '*vidsum._job_runner*' } "
+    exe_name = Path(sys.executable).name
+    marker = ("--job-runner" if getattr(sys, "frozen", False)
+              else "vidsum._job_runner")
+    script = (f"Get-CimInstance Win32_Process -Filter \"Name='{exe_name}'\" "
+              f"| Where-Object {{ $_.CommandLine -like '*{marker}*' }} "
               "| ForEach-Object { Stop-Process -Id $_.ProcessId -Force }")
     try:
         subprocess.run(["powershell", "-NoProfile", "-Command", script],
                        capture_output=True, timeout=30)
     except Exception:
         pass  # 清理失败不碍事：顶多下次手动杀
-        job.cancel.set()
 
 
 class Handler(BaseHTTPRequestHandler):

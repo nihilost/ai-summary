@@ -78,6 +78,53 @@ Whisper 模型档位），云端轨道填接口地址 / Key / 模型。两条轨
 对方已填的内容都会保留。输入框填 http(s)/m3u8 直链时会多出 User-Agent / Referer /
 Cookie 请求头。表单选择和最近输入存在浏览器本地，深浅主题跟随系统、也可手动切换。
 
+## 打包成 exe
+
+用 PyInstaller 打成 onedir 形态的 `dist\vidsum\vidsum.exe`：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File packaging\build.ps1
+```
+
+默认用 `E:\anaconda\envs\testenv\python.exe`（装了全部可选依赖），换解释器加
+`-Python 路径`。产物是 `dist\vidsum\` 整个目录：`vidsum.exe` 加一个 `_internal`
+依赖目录，一起拷到没装 Python 的机器上就能跑，双击即开 Web 控制台，命令行参数
+也全盘支持。分发时把这个目录压成 zip 即可。
+
+两个构建决策值得说明：
+
+- **onedir 而不是 onefile**。onefile 的 bootloader 启动时要把整个包自解压到
+  `%TEMP%\_MEIxxxx`，火绒这类行为防护会拦掉“未知 exe 往磁盘释放 DLL”的动作，
+  exe 根本起不来；onedir 的 DLL 构建期就落在 exe 旁边，运行期一个字节都不往
+  temp 写，启动也省掉每次数十秒的自解压延迟。
+- **console=True 不能关**：实时日志走 stdout，关了只剩空窗口。
+
+模型（1.5GB 起）不进 bundle，放 exe 旁边即可被识别：
+
+```powershell
+# 把项目根的 models\whisper 硬链接到 exe 旁边：秒完成、不占第二份空间
+# （必须是真目录——huggingface_hub 的缓存扫描不认 junction/符号链接，
+# 挂了会被当成“本地没缓存”转而去连 Hub）
+powershell -ExecutionPolicy Bypass -File packaging\link_models.ps1
+```
+
+PyInstaller 每次构建都会清空 `dist\vidsum`，所以重建 exe 后跑一次上面的脚本
+就能恢复模型目录，不必手动拷 1.5GB。输出默认落在 exe 旁的 `vidsum-out\`。
+
+### 端到端验证
+
+`packaging\e2e_check.py` 驱动真实 exe 跑全链路（先起服务，再跑脚本）：
+
+```powershell
+.\dist\vidsum\vidsum.exe --web --port 8799
+E:\anaconda\envs\testenv\python.exe packaging\e2e_check.py
+```
+
+覆盖：前端页面从 bundle 里出来、冻结态子进程 spawn（exe 冻结后自调用
+`--job-runner`）、中文日志经管道不变乱码、真实音频转写（GPU 命中、模型从
+exe 相邻目录加载、产出 transcript.md）。脚本会顺手确认 exe 旁边有
+`models\whisper`，没有就自动硬链接过去。
+
 ## 工作方式
 
 1. **抽音频**：从文件或 URL 解复用出 16kHz 单声道音轨。视频文件本身从不落盘，
@@ -153,7 +200,7 @@ sherpa-onnx 一条路走的是「解码 → VAD 切段 → 逐段 paraformer →
 python -m unittest discover -s tests -t .
 ```
 
-261 个用例，全部不依赖 ffmpeg、模型和网络：
+275 个用例，全部不依赖 ffmpeg、模型和网络：
 
 - `tests/test_commands.py` 直接断言 ffmpeg 命令行的构造（参数顺序、取值、`-headers` 位置）；
 - `tests/test_pipeline.py::RealMediaLayerTest` 只替换最底层的 `media._run`，
@@ -180,5 +227,7 @@ python -m unittest discover -s tests -t .
 - **流式不等于省内存**：转写文本三小时也只有几十 KB。分块真正的收益是 LLM 上下文有上界、
   ASR 长音频不漂移、以及崩溃后能续跑。
 - **任务跑在子进程里**：Web 控制台的每个任务都是独立的 `python -m vidsum._job_runner`
-  子进程。停止即终止进程，卡在 CUDA 初始化里的任务也杀得掉，任务崩溃也不会带垮服务；
+  子进程（exe 冻结后没有解释器可用，改为自调用 `vidsum.exe --job-runner`，
+  由 `vidsum.entry` 统一分发）。停止即终止进程，卡在 CUDA 初始化里的任务也杀得掉，
+  任务崩溃也不会带垮服务；
   日志经 stdout 管道流回界面（强制 UTF-8，中文不乱码），断点续跑照旧依赖磁盘缓存。

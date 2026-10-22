@@ -14,8 +14,26 @@ import types
 from . import pipeline
 
 
+def _force_utf8_output() -> None:
+    """管道场景下把标准输出切成 UTF-8。
+
+    Web 控制台按 UTF-8 读子进程输出。开发态这由 _child_env() 里的
+    PYTHONIOENCODING 保证，但 PyInstaller 冻结后该变量被忽略，stdout
+    仍是中文 Windows 的 GBK，整条日志流都会变乱码。这里显式 reconfigure，
+    源码态和 exe 态行为一致。交互式终端（isatty）保持本地编码——
+    那种场合 GBK 才是对的。
+    """
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            if stream is not None and not stream.isatty():
+                stream.reconfigure(encoding="utf-8")
+        except (AttributeError, ValueError, OSError):
+            pass
+
+
 def main(argv=None) -> int:
     argv = sys.argv[1:] if argv is None else list(argv)
+    _force_utf8_output()
     if not argv:
         print("用法：python -m vidsum._job_runner <params.json>", file=sys.stderr)
         return 2

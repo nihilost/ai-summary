@@ -3,6 +3,8 @@ __pycache__/
 .test-tmp/
 vidsum-out/
 models/
+build/
+dist/
 *.egg-info/
 .venv/
 venv/
