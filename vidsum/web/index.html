@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>vidsum 控制台</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%230d9488'/%3E%3Cpath d='M10 8l6 4-6 4z' fill='white'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/styles.css">
+<script>
+  // 尽早落地主题，避免闪白
+  try {
+    var t = localStorage.getItem("vidsum-theme");
+    if (!t) t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    document.documentElement.setAttribute("data-theme", t);
+  } catch (e) {}
+</script>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-logo" viewBox="0 0 24 24"><rect x="2.5" y="2.5" width="19" height="19" rx="5.5" fill="currentColor"/><path d="M10 8l6 4-6 4z" fill="#fff"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.6" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><polyline points="14 3 14 8 19 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><line x1="9" y1="6" x2="20" y2="6"/><line x1="9" y1="12" x2="20" y2="12"/><line x1="9" y1="18" x2="20" y2="18"/><circle cx="4.5" cy="6" r="1.3" fill="currentColor" stroke="none"/><circle cx="4.5" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="4.5" cy="18" r="1.3" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><polygon points="12 3 14.6 8.6 20.5 9.4 16.2 13.7 17.3 19.5 12 16.6 6.7 19.5 7.8 13.7 3.5 9.4 9.4 8.6 12 3"/></symbol>
+    <symbol id="i-terminal" viewBox="0 0 24 24"><polyline points="5 8 9 12 5 16"/><line x1="12" y1="16" x2="19" y2="16"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M4 5h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/><line x1="2" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="22" y2="12"/><line x1="4.9" y1="4.9" x2="6.3" y2="6.3"/><line x1="17.7" y1="17.7" x2="19.1" y2="19.1"/><line x1="4.9" y1="19.1" x2="6.3" y2="17.7"/><line x1="17.7" y1="6.3" x2="19.1" y2="4.9"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4 8.5 8.5 0 1 0 20 14.5z"/></symbol>
+    <symbol id="i-spinner" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-6.2-8.6" /></symbol>
+    <symbol id="i-cpu" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/><rect x="9" y="9" width="6" height="6" rx="1"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></symbol>
+    <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></symbol>
+  </defs>
+</svg>
+
+<header class="appbar">
+  <div class="brand">
+    <svg class="brand-mark"><use href="#i-logo"/></svg>
+    <div class="brand-text">
+      <span class="brand-name">vidsum</span>
+      <span class="brand-sub">长视频转写 · 滚动摘要</span>
+    </div>
+  </div>
+  <button id="theme-toggle" class="icon-btn" type="button" title="切换深浅色" aria-label="切换主题">
+    <svg class="icon"><use href="#i-sun"/></svg>
+  </button>
+</header>
+
+<main class="layout">
+  <aside class="panel">
+    <form id="form" autocomplete="off" onsubmit="return false">
+
+      <section class="group">
+        <label class="group-title" for="input">输入</label>
+        <input id="input" class="field mono" list="recent" type="text"
+               placeholder="视频/音频本地路径，或 http(s)/m3u8 直链">
+        <datalist id="recent"></datalist>
+        <div class="row row-2">
+          <label class="sub" for="output">输出目录</label>
+          <input id="output" class="field mono" type="text" placeholder="留空用默认 vidsum-out">
+        </div>
+      </section>
+
+      <section class="group">
+        <label class="group-title">转写方式</label>
+        <div class="segmented" id="asr-track">
+          <button type="button" class="seg active" data-track="local">
+            <svg class="icon"><use href="#i-cpu"/></svg><span>本地</span>
+          </button>
+          <button type="button" class="seg" data-track="cloud">
+            <svg class="icon"><use href="#i-cloud"/></svg><span>云端 API</span>
+          </button>
+        </div>
+
+        <div class="track" id="track-local">
+          <div class="row">
+            <select id="asr-local" class="field">
+              <option value="sherpa" selected>sherpa · paraformer</option>
+              <option value="faster-whisper">faster-whisper · Whisper</option>
+              <option value="dummy">dummy · 联调</option>
+            </select>
+          </div>
+          <div class="row row-2" id="wrap-model-size" hidden>
+            <label class="sub" for="model-size">Whisper 模型</label>
+            <select id="model-size" class="field">
+              <option>tiny</option><option>base</option><option>small</option>
+              <option selected>medium</option><option>large-v3</option>
+            </select>
+          </div>
+          <div class="row" id="wrap-whisper-dir" hidden>
+            <input id="whisper-download-root" class="field mono" type="text" placeholder="模型缓存目录（留空用默认，如下到 E 盘）">
+          </div>
+          <div id="wrap-sherpa">
+            <div class="row">
+              <input id="sherpa-model-dir" class="field mono" type="text" placeholder="模型目录（留空自动搜索）">
+            </div>
+            <div class="row row-2">
+              <label class="sub" for="sherpa-threads">推理线程</label>
+              <input id="sherpa-threads" class="field" type="number" min="1" max="16" step="1" value="2">
+            </div>
+            <label class="check"><input id="no-punctuation" type="checkbox"><span class="switch"></span>关闭标点恢复</label>
+          </div>
+        </div>
+
+        <div class="track" id="track-cloud" hidden>
+          <div class="row"><input id="asr-base-url" class="field mono" type="text" placeholder="接口地址（留空用默认）"></div>
+          <div class="row"><input id="asr-model" class="field" type="text" placeholder="模型名，如 whisper-1"></div>
+          <div class="row"><input id="asr-api-key" class="field mono" type="password" placeholder="API Key"></div>
+        </div>
+        <div class="row row-2">
+          <label class="sub" for="audio-backend">音频后端</label>
+          <select id="audio-backend" class="field">
+            <option value="auto" selected>auto</option>
+            <option value="pyav">pyav</option>
+            <option value="ffmpeg">ffmpeg</option>
+          </select>
+        </div>
+        <div class="row row-2">
+          <label class="sub" for="language">语言</label>
+          <input id="language" class="field" type="text" value="zh">
+        </div>
+        <div class="row row-2">
+          <label class="sub" for="chunk-minutes">每段（分钟）</label>
+          <input id="chunk-minutes" class="field" type="number" min="0.5" step="0.5" value="1">
+        </div>
+        <div class="row row-2">
+          <label class="sub" for="workers">并发数</label>
+          <input id="workers" class="field" type="number" min="1" max="16" step="1" value="2">
+        </div>
+      </section>
+
+      <section class="group">
+        <label class="group-title">画面处理</label>
+        <div class="row row-2">
+          <label class="sub" for="frames-per-segment">每段帧数</label>
+          <input id="frames-per-segment" class="field" type="number" min="0" max="12" step="1" value="2">
+        </div>
+        <div class="row row-2">
+          <label class="sub" for="frame-width">帧宽（像素）</label>
+          <input id="frame-width" class="field" type="number" min="160" max="1920" step="20" value="480">
+        </div>
+        <label class="check"><input id="no-frames" type="checkbox"><span class="switch"></span>关闭抽帧</label>
+        <label class="check"><input id="vision" type="checkbox"><span class="switch"></span>多模态总结（关键帧喂给 LLM）</label>
+      </section>
+
+      <section class="group">
+        <label class="group-title">总结</label>
+        <label class="check"><input id="no-summary" type="checkbox"><span class="switch"></span>只转写，不总结</label>
+        <div id="wrap-llm">
+          <div class="row"><input id="llm-model" class="field" type="text" placeholder="模型名，如 gpt-4o-mini"></div>
+          <div class="row"><input id="llm-base-url" class="field mono" type="text" placeholder="接口地址（留空用默认）"></div>
+          <div class="row"><input id="llm-api-key" class="field mono" type="password" placeholder="API Key"></div>
+          <div class="row row-2">
+            <label class="sub" for="llm-max-tokens">token 上限</label>
+            <input id="llm-max-tokens" class="field" type="number" min="256" max="32768" step="256" value="2048" title="单次回复的 token 上限。推理模型（如 step-5）的思考会占用这份预算，不够时会自动加大重试">
+          </div>
+        </div>
+      </section>
+
+      <section class="group">
+        <label class="group-title">选项</label>
+        <div class="checks">
+          <label class="check"><input id="keep-audio" type="checkbox"><span class="switch"></span>保留音频</label>
+          <label class="check"><input id="keep-chunks" type="checkbox"><span class="switch"></span>保留切片</label>
+          <label class="check"><input id="no-silence-split" type="checkbox"><span class="switch"></span>关闭静音对齐</label>
+          <label class="check"><input id="force" type="checkbox"><span class="switch"></span>忽略缓存重跑</label>
+        </div>
+      </section>
+
+      <section class="group" id="wrap-network" hidden>
+        <label class="group-title">网络源请求头</label>
+        <div class="row"><input id="user-agent" class="field mono" type="text" placeholder="User-Agent（留空用默认）"></div>
+        <div class="row"><input id="referer" class="field mono" type="text" placeholder="Referer（留空）"></div>
+        <div class="row"><input id="cookie" class="field mono" type="password" placeholder="Cookie（留空）"></div>
+      </section>
+
+      <div class="actions">
+        <button id="btn-run" class="btn btn-primary" type="button">
+          <svg class="icon"><use href="#i-play"/></svg><span>开始转写</span>
+        </button>
+        <button id="btn-dry" class="btn" type="button" title="只抽音频并打印分段计划，不转写">
+          <svg class="icon"><use href="#i-eye"/></svg><span>试运行</span>
+        </button>
+        <button id="btn-stop" class="btn btn-danger" type="button" disabled>
+          <svg class="icon"><use href="#i-stop"/></svg><span>停止</span>
+        </button>
+      </div>
+    </form>
+  </aside>
+
+  <section class="workspace">
+    <div class="statusbar">
+      <span id="state-pill" class="pill pill-idle"><span class="dot"></span><span id="state-text">空闲</span></span>
+      <div class="progress" title="转写进度">
+        <div id="progress-bar" class="progress-bar"></div>
+      </div>
+      <span id="progress-text" class="muted mono">–</span>
+      <span class="statusbar-grow"></span>
+      <span id="elapsed" class="muted mono">00:00</span>
+      <span id="work-dir" class="work mono" title=""></span>
+    </div>
+
+    <nav class="tabs" id="tabs">
+      <button class="tab active" data-tab="transcript"><svg class="icon"><use href="#i-file"/></svg><span>转写稿</span></button>
+      <button class="tab" data-tab="summary"><svg class="icon"><use href="#i-list"/></svg><span>摘要</span></button>
+      <button class="tab" data-tab="final"><svg class="icon"><use href="#i-star"/></svg><span>终稿</span></button>
+      <button class="tab" data-tab="logs"><svg class="icon"><use href="#i-terminal"/></svg><span>日志</span></button>
+      <button class="tab" data-tab="files"><svg class="icon"><use href="#i-folder"/></svg><span>文件</span></button>
+    </nav>
+
+    <div class="content">
+      <div class="pane" data-pane="transcript"><div id="out-transcript" class="doc"></div></div>
+      <div class="pane" data-pane="summary" hidden><div id="out-summary" class="doc"></div></div>
+      <div class="pane" data-pane="final" hidden><div id="out-final" class="doc"></div></div>
+      <div class="pane" data-pane="logs" hidden><pre id="out-logs" class="logs"></pre></div>
+      <div class="pane" data-pane="files" hidden>
+        <table class="files"><thead><tr><th>文件</th><th class="num">大小</th></tr></thead>
+        <tbody id="out-files"></tbody></table>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="/app.js"></script>
+</body>
+</html>

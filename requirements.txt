@@ -1,0 +1,11 @@
+# 转写后端二选一（或都用）：本地推理装 faster-whisper，云端转写用 --asr api。
+# faster-whisper 会一并带入 ctranslate2；CPU 上建议保留默认 int8 精度。
+faster-whisper>=1.0.0
+
+ # sherpa-onnx 后端：复用 VideoToNo 等工具已下载的 paraformer 模型，
+ # 装了解码就自带整套 FFmpeg 动态库，可以不另外装 ffmpeg。
+ sherpa-onnx>=1.10.0
+ av>=10.0.0
+
+# 以下均为可选加速项，不装也能跑（会退回到纯标准库实现）：
+# requests>=2.31        # 仅当你想替换 llm.py / asr_api.py 里的 urllib 实现
