@@ -86,12 +86,16 @@
           <div class="row row-2" id="wrap-model-size" hidden>
             <label class="sub" for="model-size">Whisper 模型</label>
             <select id="model-size" class="field">
+              <option selected>auto</option>
               <option>tiny</option><option>base</option><option>small</option>
-              <option selected>medium</option><option>large-v3</option>
+              <option>medium</option><option>large-v3</option>
             </select>
           </div>
           <div class="row" id="wrap-whisper-dir" hidden>
             <input id="whisper-download-root" class="field mono" type="text" placeholder="模型缓存目录（留空用默认，如下到 E 盘）">
+          </div>
+          <div class="row" id="wrap-hf-endpoint" hidden>
+            <input id="hf-endpoint" class="field mono" type="text" placeholder="下载源（留空用 huggingface.co，国内可用 https://hf-mirror.com）">
           </div>
           <div id="wrap-sherpa">
             <div class="row">

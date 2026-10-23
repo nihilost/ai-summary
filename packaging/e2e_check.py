@@ -85,7 +85,7 @@ def main():
                 logs.strip().splitlines()[-1][:80] if logs.strip() else "")
 
     status = run_job({"input": r"E:\project2\vidsum-out\audio_p1\audio.mp3",
-                      "asr": "faster-whisper", "model_size": "medium",
+                      "asr": "faster-whisper", "model_size": "auto",
                       "no_summary": True, "output": OUT}, 600)
     if status is None:
         return 1
@@ -94,6 +94,9 @@ def main():
                 f"state={status['state']} err={status.get('error')}")
     ok &= check("GPU 被探测到", "cuda" in logs.lower(),
                 str([l for l in logs.splitlines() if "cuda" in l.lower()][:1]))
+    ok &= check("auto 档位被解析成具体模型",
+                "复用已缓存模型" in logs or "按显存" in logs,
+                str([l for l in logs.splitlines() if "模型=" in l][:1]))
     ok &= check("模型从 exe 相邻目录加载", "models" in logs.lower(),
                 str([l for l in logs.splitlines() if "模型" in l][:1]))
     files = status.get("files") or []

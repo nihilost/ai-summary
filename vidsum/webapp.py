@@ -165,7 +165,7 @@ def _build_args(params: dict):
                                        args.llm_max_tokens))
     # 纯空白视为未填：strip 后为空则保留 argparse 默认，与 sherpa_model_dir 一致
     for key in ("asr_base_url", "asr_api_key", "asr_model",
-                "user_agent", "referer", "cookie"):
+                "user_agent", "referer", "cookie", "hf_endpoint"):
         value = str(params.get(key) or "").strip()
         if value:
             setattr(args, key, value)

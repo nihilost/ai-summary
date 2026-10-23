@@ -161,6 +161,7 @@ function readForm() {
     chunk_minutes: num("chunk-minutes", 1),
     workers: Math.max(1, Math.round(num("workers", 2))),
     model_size: $("model-size").value,
+    hf_endpoint: $("hf-endpoint").value.trim(),
     sherpa_threads: Math.max(1, Math.round(num("sherpa-threads", 2))),
     frames_per_segment: Math.max(0, Math.round(num("frames-per-segment", 2))),
     frame_width: Math.max(160, Math.round(num("frame-width", 480))),
@@ -220,6 +221,7 @@ function syncVisibility() {
   const local = $("asr-local").value;
   $("wrap-model-size").hidden = track !== "local" || local !== "faster-whisper";
   $("wrap-whisper-dir").hidden = track !== "local" || local !== "faster-whisper";
+  $("wrap-hf-endpoint").hidden = track !== "local" || local !== "faster-whisper";
   $("wrap-sherpa").hidden = track !== "local" || local !== "sherpa";
   $("wrap-llm").hidden = $("no-summary").checked;
   $("wrap-network").hidden = !isNetworkInput($("input").value);
@@ -264,6 +266,7 @@ function restoreSettings() {
   put("workers", s.workers);
   put("sherpa-model-dir", s.sherpa_model_dir);
   put("whisper-download-root", s.whisper_download_root);
+  put("hf-endpoint", s.hf_endpoint);
   put("sherpa-threads", s.sherpa_threads);
   put("frames-per-segment", s.frames_per_segment);
   put("frame-width", s.frame_width);

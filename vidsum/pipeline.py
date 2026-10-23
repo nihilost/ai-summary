@@ -343,6 +343,7 @@ def run(args) -> int:
         num_threads=getattr(args, "sherpa_threads", 2),
         punctuation=not getattr(args, "no_punctuation", False),
         download_root=getattr(args, "whisper_download_root", None),
+        hf_endpoint=getattr(args, "hf_endpoint", None),
     )
 
     chunk_dir = work / "chunks"

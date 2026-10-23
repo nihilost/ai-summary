@@ -27,7 +27,7 @@ E:\anaconda\envs\testenv\python.exe -m pip install faster-whisper # 本地 whisp
 
 ```powershell
 # 本地视频 + 本地模型
-python -m vidsum lecture.mp4 --asr faster-whisper --model-size medium --llm-api-key sk-xxx
+python -m vidsum lecture.mp4 --asr faster-whisper --llm-api-key sk-xxx
 
 # 云端转写 + 云端总结（零本地依赖）
 python -m vidsum lecture.mp4 --asr api --asr-model whisper-large-v3 --asr-api-key sk-xxx --llm-api-key sk-xxx
@@ -111,6 +111,9 @@ powershell -ExecutionPolicy Bypass -File packaging\link_models.ps1
 PyInstaller 每次构建都会清空 `dist\vidsum`，所以重建 exe 后跑一次上面的脚本
 就能恢复模型目录，不必手动拷 1.5GB。输出默认落在 exe 旁的 `vidsum-out\`。
 
+分发到别的机器时不必预埋模型：`--model-size` 默认 `auto`，会按那台机器的显存挑档位并
+自行下载（详见「模型档位与下载」）。显存小的机器不会去下 large-v3，也不会 OOM。
+
 ### 端到端验证
 
 `packaging\e2e_check.py` 驱动真实 exe 跑全链路（先起服务，再跑脚本）：
@@ -152,8 +155,9 @@ exe 相邻目录加载、产出 transcript.md）。脚本会顺手确认 exe 旁
 | `--chunk-minutes N` | 每段目标时长，默认 10 分钟 |
 | `--workers N` | 并发转写数，默认 `min(4, CPU/2)` |
 | `--asr` | `faster-whisper`（本地）/ `sherpa`（本地 paraformer）/ `api`（OpenAI 兼容转写接口）/ `dummy`（联调） |
-| `--model-size` | faster-whisper 模型大小，默认 `medium` |
+| `--model-size` | faster-whisper 模型档位，默认 `auto`：按显存档位挑，并优先复用本地已缓存模型；也可指定 `tiny`/`base`/`small`/`medium`/`large-v3`，详见「模型档位与下载」 |
 | `--whisper-download-root` | faster-whisper 模型的下载/缓存目录，默认项目目录下的 `models/whisper`；想放别处就指过来，如 `E:\whisper-models` |
+| `--hf-endpoint` | 模型下载源，默认 `huggingface.co`；国内网络不通时用 `https://hf-mirror.com`（也可设环境变量 `VIDSUM_HF_ENDPOINT`） |
 | `--audio-backend` | `auto`（默认）/ `ffmpeg` / `pyav` |
 | `--sherpa-model-dir` | sherpa 模型目录，含 `asr/` `vad/` `punc/` 子目录；也可用环境变量 `VIDSUM_SHERPA_MODEL_DIR` |
 | `--sherpa-threads` | sherpa 推理线程数，默认 2 |
@@ -175,6 +179,36 @@ exe 相邻目录加载、产出 transcript.md）。脚本会顺手确认 exe 旁
 它解析成 DASH 音频流直链并带上 `Referer`，不必自己去找播放地址。这一步要能访问
 bilibili.com；要高音质或遇到需要登录/大会员的片子时，把 Cookie 填进 `--cookie`
 （网页控制台里输入链接后会出现"网络源请求头"一栏）。
+
+## 模型档位与下载
+
+`--model-size auto`（默认）让工具自己决定用哪个 Whisper 模型，规则只有两条：**本地已有的优
+先复用，没有再按显存档位下载**。
+
+显存档位按 int8 推理的近似峰值占用估的，宁可保守——显存不够时 ctranslate2 是直接崩，不是
+优雅报错：
+
+| 显存 | 档位 | 首次下载约 |
+| --- | --- | --- |
+| ≥ 10 GB | `large-v3` | 3.0 GB |
+| ≥ 6 GB | `medium` | 1.5 GB |
+| ≥ 3 GB | `small` | 460 MB |
+| 其余 | `base` | 143 MB |
+
+显存通过驱动自带的 `nvml.dll` 探测（ctypes，零第三方依赖），探测不到就按 6 GB 档保守处理。
+换到 CPU 推理时若本地有缓存，直接用最大的那个；没有缓存则取 `base`。
+
+下载前会做一次磁盘空间预检（所需空间的 1.2 倍），不够就早失败，不会下到一半撑爆。模型缓存
+放在 `--whisper-download-root` 指定的目录，默认是程序根目录下的 `models/whisper`——exe 冻结
+后就是 `vidsum.exe` 旁边的 `models/whisper`。
+
+国内网络访问 `huggingface.co` 不通时，用镜像：
+
+```powershell
+python -m vidsum lecture.mp4 --hf-endpoint https://hf-mirror.com
+```
+
+下载失败且没设端点时，错误信息里会直接带上这条提示。
 
 ## sherpa 后端
 
@@ -200,7 +234,7 @@ sherpa-onnx 一条路走的是「解码 → VAD 切段 → 逐段 paraformer →
 python -m unittest discover -s tests -t .
 ```
 
-275 个用例，全部不依赖 ffmpeg、模型和网络：
+284 个用例，全部不依赖 ffmpeg、模型和网络：
 
 - `tests/test_commands.py` 直接断言 ffmpeg 命令行的构造（参数顺序、取值、`-headers` 位置）；
 - `tests/test_pipeline.py::RealMediaLayerTest` 只替换最底层的 `media._run`，

@@ -55,8 +55,11 @@ def build_parser() -> argparse.ArgumentParser:
     asr.add_argument("--asr", default="faster-whisper",
                      choices=["faster-whisper", "api", "dummy", "sherpa"],
                      help="转写后端，默认 faster-whisper")
-    asr.add_argument("--model-size", default="medium",
-                     help="faster-whisper 模型大小，默认 medium")
+    asr.add_argument("--model-size", default="auto",
+                     help="faster-whisper 模型大小，默认 auto：按显存档位挑"
+                          "（≥10GB→large-v3，≥6GB→medium，≥3GB→small，"
+                          "其余 base），并优先复用本地已缓存模型；也可指定 "
+                          "tiny/base/small/medium/large-v3")
     asr.add_argument("--device", default="auto",
                      help="推理设备 auto/cpu/cuda，默认 auto")
     asr.add_argument("--compute-type", default="int8",
@@ -65,6 +68,10 @@ def build_parser() -> argparse.ArgumentParser:
                      help="faster-whisper 模型的下载/缓存目录，默认用项目目录"
                           "下的 models\\whisper；想放别处就指过来，"
                           "如 E:\\whisper-models")
+    asr.add_argument("--hf-endpoint",
+                     help="模型下载源，默认 huggingface.co；国内不通时设 "
+                          "https://hf-mirror.com（也可用环境变量 "
+                          "VIDSUM_HF_ENDPOINT）")
     asr.add_argument("--language", default="zh", help="音频语言，默认 zh")
     asr.add_argument("--workers", type=int, default=default_workers(),
                      help="并发转写数，默认 min(4, CPU/2)")

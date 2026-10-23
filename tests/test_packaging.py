@@ -7,6 +7,7 @@ frozen 形态靠 patch sys.frozen / sys.executable 模拟。
 from __future__ import annotations
 
 import io
+import os
 import sys
 import types
 import unittest
@@ -14,9 +15,12 @@ from pathlib import Path
 from unittest import mock
 
 from vidsum import entry, webapp
+from vidsum import asr_faster
 from vidsum.asr_faster import FasterWhisperBackend
 from vidsum._job_runner import _force_utf8_output
 from vidsum.util import app_root
+
+from tests.support import TempDirCase
 
 EXE_DIR = Path(__file__).resolve().parent.parent  # 开发态 = 项目根
 
@@ -166,6 +170,121 @@ class FasterWhisperDeviceTest(unittest.TestCase):
         self._backend(download_root=r"D:\whisper-models")
         self.assertEqual(_RecordingWhisperModel.last_kwargs["download_root"],
                          r"D:\whisper-models")
+
+
+def _make_cache(root: Path, *sizes: str) -> None:
+    """造出 huggingface_hub 布局的假缓存：snapshots/<rev>/model.bin。"""
+    for size in sizes:
+        d = root / f"models--Systran--faster-whisper-{size}" / "snapshots" / "rev"
+        d.mkdir(parents=True)
+        (d / "model.bin").write_bytes(b"0" * 16)
+
+
+class AutoModelSizeTest(TempDirCase):
+    """model_size="auto"：优先复用已缓存模型，否则按显存档位挑。"""
+
+    def setUp(self):
+        fake_ct2 = types.ModuleType("ctranslate2")
+        fake_ct2.get_cuda_device_count = lambda: 1  # 默认当有卡
+        fake_fw = types.ModuleType("faster_whisper")
+        fake_fw.WhisperModel = _RecordingWhisperModel
+        for name, mod in (("ctranslate2", fake_ct2),
+                          ("faster_whisper", fake_fw)):
+            patcher = mock.patch.dict(sys.modules, {name: mod})
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        _RecordingWhisperModel.last_kwargs = None
+        self.root = self.make_dir()
+
+    def _backend(self, **kwargs):
+        kwargs.setdefault("download_root", str(self.root))
+        return FasterWhisperBackend(**kwargs)
+
+    def _cached_size(self) -> str:
+        return _RecordingWhisperModel.last_kwargs["model_size"]
+
+    def test_reuses_cached_model_when_vram_fits(self):
+        # 本机 RTX 4060 的 8188MB：medium 装得下，不重新下载 large-v3
+        _make_cache(self.root, "medium")
+        with mock.patch.object(asr_faster, "_cuda_vram_mb",
+                               return_value=8188):
+            backend = self._backend(model_size="auto")
+        self.assertEqual(backend.device, "cuda")
+        self.assertEqual(self._cached_size(), "medium")
+
+    def test_big_vram_downloads_top_tier_without_cache(self):
+        with mock.patch.object(asr_faster, "_cuda_vram_mb",
+                               return_value=24576), \
+                mock.patch.object(asr_faster, "_ensure_disk_space"):
+            backend = self._backend(model_size="auto")
+        self.assertEqual(self._cached_size(), "large-v3")
+
+    def test_cached_model_too_big_for_vram_is_skipped(self):
+        _make_cache(self.root, "large-v3", "small")
+        with mock.patch.object(asr_faster, "_cuda_vram_mb",
+                               return_value=8188), \
+                mock.patch.object(asr_faster, "_ensure_disk_space"):
+            self._backend(model_size="auto")
+        # 8GB 装不下 large-v3，退到已缓存的 small
+        self.assertEqual(self._cached_size(), "small")
+
+    def test_cpu_auto_uses_largest_cached(self):
+        _make_cache(self.root, "small", "medium")
+        fake_ct2 = types.ModuleType("ctranslate2")
+        fake_ct2.get_cuda_device_count = lambda: 0
+        with mock.patch.dict(sys.modules, {"ctranslate2": fake_ct2}):
+            backend = self._backend(model_size="auto")
+        self.assertEqual(backend.device, "cpu")
+        self.assertEqual(self._cached_size(), "medium")
+
+    def test_explicit_size_beats_auto(self):
+        _make_cache(self.root, "large-v3")
+        with mock.patch.object(asr_faster, "_cuda_vram_mb",
+                               return_value=24576):
+            self._backend(model_size="tiny")
+        self.assertEqual(self._cached_size(), "tiny")
+
+    def test_disk_space_checked_only_for_download(self):
+        _make_cache(self.root, "medium")
+        with mock.patch.object(asr_faster, "_cuda_vram_mb",
+                               return_value=8188), \
+                mock.patch.object(asr_faster, "_ensure_disk_space") as space:
+            self._backend(model_size="auto")
+        space.assert_not_called()  # 已有缓存：不问磁盘
+
+    def test_disk_space_blocks_thin_download(self):
+        with mock.patch.object(asr_faster, "_cuda_vram_mb",
+                               return_value=24576), \
+                mock.patch.object(
+                    asr_faster.shutil, "disk_usage",
+                    return_value=types.SimpleNamespace(free=100_000_000)):
+            with self.assertRaises(RuntimeError) as ctx:
+                self._backend(model_size="large-v3")
+        self.assertIn("空间不足", str(ctx.exception))
+
+    def test_hf_endpoint_env_set_before_import(self):
+        env = {k: v for k, v in os.environ.items()
+               if k not in ("HF_ENDPOINT", "VIDSUM_HF_ENDPOINT")}
+        with mock.patch.dict(os.environ, env, clear=True):
+            self._backend(model_size="auto", hf_endpoint="https://hf-mirror.com/")
+            self.assertEqual(os.environ.get("HF_ENDPOINT"),
+                             "https://hf-mirror.com")
+
+    def test_download_failure_hints_mirror(self):
+        class _Boom:
+            def __init__(self, *a, **kw):
+                raise ConnectionError("MaxRetryError: 10061")
+
+        fake_fw = types.ModuleType("faster_whisper")
+        fake_fw.WhisperModel = _Boom
+        env = {k: v for k, v in os.environ.items()
+               if k not in ("HF_ENDPOINT", "VIDSUM_HF_ENDPOINT")}
+        with mock.patch.dict(sys.modules, {"faster_whisper": fake_fw}), \
+                mock.patch.dict(os.environ, env, clear=True), \
+                mock.patch.object(asr_faster, "_ensure_disk_space"):
+            with self.assertRaises(RuntimeError) as ctx:
+                self._backend(model_size="tiny")
+        self.assertIn("hf-mirror.com", str(ctx.exception))
 
 
 if __name__ == "__main__":
